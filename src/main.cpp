@@ -76,7 +76,7 @@ WiFiClient espClient;
 
 PubSubClient client(espClient);
 long lastMsg = 0;
-char msg[50];
+char msg[100];
 int value = 0;
 
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -111,6 +111,9 @@ void reconnect() {
       // ... and resubscribe
       //client.subscribe("inTopic");
     } else {
+      //***********************************************
+      // Not battery friendly ...
+      // **********************************************
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 5 seconds");
@@ -190,6 +193,8 @@ void setup() {
        break;
      default:
        Serial.println("Found UNKNOWN sensor! Error!");
+
+       // What do we do now ?
   }
 
 
@@ -224,13 +229,18 @@ void loop() {
   BME280::PresUnit presUnit(BME280::PresUnit_Pa);
 
 
-  if (!client.connected()) {
+  // connects to MQTT if not connected already
+  if (!client.connected())
+  {
     reconnect();
   }
+
+  // allows MQTT to connect properly ...
   client.loop();
 
   long now = millis();
-  if (now - lastMsg > 2000) {
+  if (now - lastMsg > 2000)
+  {
     lastMsg = now;
     ++value;
 
@@ -242,21 +252,29 @@ void loop() {
 
     int t, h, p;
 
+    // two digits of precision
+    // so t is in hundredths of degrees, and h is hundredths of millibars
     t = (int) (temp * 100.0);
     h = (int) (hum * 100.0);
     p = (int) pres;
-    snprintf (msg, 75, "Weather @ #%ld (%ld)ms T: %d.%02d° H: %d.%02d%% P: %d.%02d",
-                            value, millis(),
+
+    // snprintf (msg, 75, "Weather @ #%ld (%ld)ms T: %d.%02d° H: %d.%02d%% P: %d.%02d",
+    //                         value, millis(),
+    //                         t / 100, t % 100,
+    //                         h / 100, h % 100,
+    //                         p / 100, p %100);
+    //
+    snprintf (msg, 75, "{ \"T\" : \"%d.%02d\", \"H\" : \"%d.%02d\", \"P\" : \"%d.%02d\" }",
                             t / 100, t % 100,
                             h / 100, h % 100,
                             p / 100, p %100);
 
 
 
-    Serial.print("Publish message: ");
-    Serial.println(msg);
-    client.publish("outTopic", msg);
+    Serial.print("Publish message: "); Serial.println(msg);
 
+    // publish
+    client.publish("outTopic", msg);
   }
 
 
