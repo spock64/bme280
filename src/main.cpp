@@ -56,9 +56,12 @@ Assume proper initialisation when waking from deep sleep - but no context
 #include <ESP8266WebServer.h>
 #include <WiFiManager.h>
 
+#include "jButton.h"
+
 BME280I2C bme;
 
 #define BUTTON D1
+#define REPORT_PERIOD 20000
 
 
 // Update these with values suitable for your network.
@@ -76,9 +79,11 @@ IPAddress dns= IPAddress(192,168,16,1);
 WiFiClient espClient;
 
 PubSubClient client(espClient);
+
 long lastMsg = 0;
 char msg[100];
 int value = 0;
+const char* topic = "xTemp";
 
 void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
@@ -105,7 +110,7 @@ void reconnect() {
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
     // Attempt to connect
-    if (client.connect("ESP8266Client")) {
+    if (client.connect("ESP BME280 Btn")) {
       Serial.println("connected");
       // Once connected, publish an announcement...
       //client.publish("outTopic", "hello world");
@@ -131,33 +136,54 @@ void configModeCallback (WiFiManager *myWiFiManager) {
   Serial.println(myWiFiManager->getConfigPortalSSID());
 }
 
+void one_click()
+{
+  Serial.printf("one click\n");
+}
+
+void two_click()
+{
+  Serial.printf("two click\n");
+}
+
+void three_click()
+{
+  Serial.printf("three click\n");
+}
+
+void four_click()
+{
+  Serial.printf("four click\n");
+}
+
+void long_click()
+{
+  Serial.printf("long click\n");
+}
+
+
 void setup() {
 
   pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
-  pinMode(BUTTON, INPUT_PULLUP);
+
+  setupButton(D6);
+  btnSetHandler(1, "hOne", one_click);
+  btnSetHandler(2, "hTwo", two_click);
+  btnSetHandler(3, "hThree", three_click);
+  btnSetHandler(4, "hFour", four_click);
+  btnSetHandler(-1, "hLong", long_click);
+
 
   Serial.begin(115200);             // Does this use power?
   delay(10);
 
-  Serial.println("Welcome - BME280 tester");
-
-  printf("\n\nSDK version: %s\n", system_get_sdk_version());
-
-
-  // Could / should detect a pin being held up or down so we can enter a
-  // "config mode"
-  // in that mode we can e.g. check for a new u-code version or new config
-  // also we could think about a longer press meaning that the wifi needs
-  // be set up again ??
+  Serial.println("\nWelcome - BME280/Button tester");
 
   WiFiManager wifiManager;
 
   // If the button is down, start the configuration portal ...
-  // Active LOW
 
-  // Temp frig ...
-  //if(!digitalRead(BUTTON))
-  if(0)
+  if(buttonDown())
   {
     char AP[20];
     byte mac[6];
@@ -176,7 +202,7 @@ void setup() {
   }
 
   // For BME280 ...
-  Wire.begin(D3,D4); // esp pins 0,2 c/w  10k pullups ...
+  Wire.begin(D1,D2);
 
   while(!bme.begin())
   {
@@ -203,12 +229,13 @@ void setup() {
   wifiManager.setAPCallback(configModeCallback);
 
   //*********************************
-  wifiManager.setDebugOutput(false);
+  wifiManager.setDebugOutput(true);
   //*********************************
+  WiFi.mode(WIFI_STA);
 
   if(!wifiManager.autoConnect())
   {
-    printf("*** ERROR - DID NOT CONNECT - SLEEPING 20s");
+    printf("*** ERROR - WIFI DID NOT CONNECT - SLEEPING 20s");
     ESP.deepSleep(20e6); // 20e6 is 20 microseconds
   }
 
@@ -222,25 +249,27 @@ void setup() {
 }
 
 
-void loop() {
+void loop()
+{
 
   float temp(NAN), hum(NAN), pres(NAN);
 
   BME280::TempUnit tempUnit(BME280::TempUnit_Celsius);
   BME280::PresUnit presUnit(BME280::PresUnit_Pa);
 
+  doButton();
 
   // connects to MQTT if not connected already
-  if (!client.connected())
+  if (!client.loop())
   {
+    Serial.printf("Mqtt disconnected - state %d Wifi %d\n", client.state(), WiFi.status());
+    // what if we hit this again ? Does the lib protect against it?
     reconnect();
+    client.loop(); // Is this one neccessary ?
   }
 
-  // allows MQTT to connect properly ...
-  client.loop();
-
   long now = millis();
-  if (now - lastMsg > 2000)
+  if ((now - lastMsg) > REPORT_PERIOD)
   {
     lastMsg = now;
     ++value;
@@ -275,24 +304,14 @@ void loop() {
     Serial.print("Publish message: "); Serial.println(msg);
 
     // publish
-    client.publish("outTopic", msg);
+    client.publish(topic, msg);
+
+    // // Not needed - happens next time around the loop
+    // if(!client.loop())
+    //   reconnect();
   }
 
 
-
-
-  // // Active LOW
-  // if(1)
-  // //if(!digitalRead(BUTTON))
-  // {
-  //   delay(1000);
-  // }
-  // else
-  {
-    Serial.println("Going into deep sleep for 20 seconds");
-    printf("Been awake %d\n\n", millis());
-    ESP.deepSleep(20e6); // 20e6 is 20 seconds
-  }
 
 }
 
