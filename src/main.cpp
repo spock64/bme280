@@ -13,31 +13,6 @@ States used in sequence?
 
 Assume proper initialisation when waking from deep sleep - but no context
 
-
-
-*** Below for reference only ***
- Basic ESP8266 MQTT example
-
- This sketch demonstrates the capabilities of the pubsub library in combination
- with the ESP8266 board/library.
-
- It connects to an MQTT server then:
-  - publishes "hello world" to the topic "outTopic" every two seconds
-  - subscribes to the topic "inTopic", printing out any messages
-    it receives. NB - it assumes the received payloads are strings not binary
-  - If the first character of the topic "inTopic" is an 1, switch ON the ESP Led,
-    else switch it off
-
- It will reconnect to the server if the connection is lost using a blocking
- reconnect function. See the 'mqtt_reconnect_nonblocking' example for how to
- achieve the same result without blocking the main loop.
-
- To install the ESP8266 board, (using Arduino 1.6.4+):
-  - Add the following 3rd party board manager under "File -> Preferences -> Additional Boards Manager URLs":
-       http://arduino.esp8266.com/stable/package_esp8266com_index.json
-  - Open the "Tools -> Board -> Board Manager" and click install for the ESP8266"
-  - Select your ESP8266 in "Tools -> Board"
-
 */
 
 #include <Arduino.h>
@@ -161,6 +136,36 @@ void long_click()
   Serial.printf("long click\n");
 }
 
+void doConfigPortal()
+{
+  char AP[20];
+  byte mac[6];
+  WiFiManager wifiManager;
+
+  WiFi.macAddress(mac);
+
+  // Set up wifi page ...
+  WiFiManagerParameter custom_mqtt_server("server", "mqtt server", "default", 40);
+  wifiManager.addParameter(&custom_mqtt_server);
+
+  sprintf(AP,"PJR9N_%02X%02X%02X",mac[3],mac[4],mac[5]);
+  printf("AP:'%s' entering config portal\n", AP);
+
+  if(wifiManager.startConfigPortal(AP))
+  {
+    // Connected
+    printf("Connected.\n");
+  }
+  else
+  {
+    // Not Connected ... set state ?
+    printf("Not Connected !\n");
+  }
+
+  // Read parameters back out - depending on whether it worked ord not ...
+
+}
+
 
 void setup() {
 
@@ -171,7 +176,7 @@ void setup() {
   btnSetHandler(2, "hTwo", two_click);
   btnSetHandler(3, "hThree", three_click);
   btnSetHandler(4, "hFour", four_click);
-  btnSetHandler(-1, "hLong", long_click);
+  btnSetHandler(-1, "hLong", doConfigPortal);
 
 
   Serial.begin(115200);             // Does this use power?
@@ -185,16 +190,8 @@ void setup() {
 
   if(buttonDown())
   {
-    char AP[20];
-    byte mac[6];
-    printf("Button pressed, entering config portal\n");
-
-    WiFi.macAddress(mac);
-    sprintf(AP,"PJR9N_%02X%02X%02X",mac[3],mac[4],mac[5]);
-    printf("AP on '%s'\n",AP);
-
-    wifiManager.startConfigPortal(AP);
-    //printf("Connected %s %s\n", WiFi.SSID(), WiFi.localIP());
+    printf("Button pressed on startup\n");
+    doConfigPortal();
   }
   else
   {
@@ -223,6 +220,8 @@ void setup() {
 
        // What do we do now ?
   }
+
+  // *** This does not make sense here ? Does it ?
 
 
   wifiManager.setSTAStaticIPConfig(ip, gw, dns);
