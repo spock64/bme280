@@ -15,6 +15,8 @@ Assume proper initialisation when waking from deep sleep - but no context
 
 */
 
+#define DEBUG_PRINT(x) Serial.println(x)
+
 #include <Arduino.h>
 
 #include <BME280I2C.h>
@@ -29,9 +31,20 @@ Assume proper initialisation when waking from deep sleep - but no context
 //needed for library
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
-#include <WiFiManager.h>
 
-#include "jButton.h"
+#include <jWiFiManager.h>
+#include <ArduinoJson.h>
+
+#include <FS.h>
+#include "SPIFFSServer.h"
+
+// Wifi Support
+//ESP8266WebServer server(80);
+SPIFFSReadServer server(80);
+DNSServer dnsServer;
+jWiFiManager jWM(server, dnsServer);
+
+#include <jButton.h>
 
 BME280I2C bme;
 
@@ -41,15 +54,15 @@ BME280I2C bme;
 
 // Update these with values suitable for your network.
 
-const char* ssid = "ROGERS";
-const char* password = "*jaylm123456!";
+// const char* ssid = "ROGERS";
+// const char* password = "*jaylm123456!";
 const char* mqtt_server = "192.168.16.3";
-
-// Used to accelerate connection ...
-IPAddress ip= IPAddress(192,168,17,200);
-IPAddress gw= IPAddress(192,168,16,1);
-IPAddress subnet= IPAddress(255,255,254,0);
-IPAddress dns= IPAddress(192,168,16,1);
+//
+// // Used to accelerate connection ...
+// IPAddress ip= IPAddress(192,168,17,200);
+// IPAddress gw= IPAddress(192,168,16,1);
+// IPAddress subnet= IPAddress(255,255,254,0);
+// IPAddress dns= IPAddress(192,168,16,1);
 
 WiFiClient espClient;
 
@@ -104,13 +117,13 @@ void reconnect() {
   }
 }
 
-void configModeCallback (WiFiManager *myWiFiManager) {
-  Serial.println("Entered WiFi config mode");
-  Serial.println(WiFi.softAPIP());
-
-  Serial.println(myWiFiManager->getConfigPortalSSID());
-}
-
+// void configModeCallback (WiFiManager *myWiFiManager) {
+//   Serial.println("Entered WiFi config mode");
+//   Serial.println(WiFi.softAPIP());
+//
+//   Serial.println(myWiFiManager->getConfigPortalSSID());
+// }
+//
 void one_click()
 {
   Serial.printf("one click\n");
@@ -140,30 +153,75 @@ void doConfigPortal()
 {
   char AP[20];
   byte mac[6];
-  WiFiManager wifiManager;
+  // WiFiManager wifiManager;
 
   WiFi.macAddress(mac);
 
-  // Set up wifi page ...
-  WiFiManagerParameter custom_mqtt_server("server", "mqtt server", "default", 40);
-  wifiManager.addParameter(&custom_mqtt_server);
+  // // Set up wifi page ...
+  // WiFiManagerParameter custom_mqtt_server("server", "mqtt server", "default", 40);
+  // wifiManager.addParameter(&custom_mqtt_server);
 
   sprintf(AP,"PJR9N_%02X%02X%02X",mac[3],mac[4],mac[5]);
   printf("AP:'%s' entering config portal\n", AP);
 
-  if(wifiManager.startConfigPortal(AP))
-  {
-    // Connected
-    printf("Connected.\n");
-  }
-  else
-  {
-    // Not Connected ... set state ?
-    printf("Not Connected !\n");
-  }
+  jWM.setApCredentials(AP);
+
+
+
+
+  // if(wifiManager.startConfigPortal(AP))
+  // {
+  //   // Connected
+  //   printf("Connected.\n");
+  // }
+  // else
+  // {
+  //   // Not Connected ... set state ?
+  //   printf("Not Connected !\n");
+  // }
 
   // Read parameters back out - depending on whether it worked ord not ...
 
+}
+
+int x;
+String y;
+
+void doStartWiFi()
+{
+  DEBUG_PRINT("* Starting wifi");
+  //make connecting/disconnecting non-blocking
+  jWM.setConnectNonBlock(true);
+
+  //in non-blocking mode, program will continue past this point without waiting
+  jWM.begin();
+
+  //handles commands from webpage, sends live data in JSON format
+  server.on("/api", []() {
+    DEBUG_PRINT("server.on /api");
+    if (server.hasArg("x")) {
+      x = server.arg("x").toInt();
+      DEBUG_PRINT(String("x: ") + x);
+    } //if
+    if (server.hasArg("y")) {
+      y = server.arg("y");
+      DEBUG_PRINT("y: " + y);
+    } //if
+
+    //build json object of program data
+    StaticJsonBuffer<200> jsonBuffer;
+    JsonObject &json = jsonBuffer.createObject();
+    json["x"] = x;
+    json["y"] = y;
+
+    char jsonchar[200];
+    json.printTo(jsonchar); //print to char array, takes more memory but sends in one piece
+    server.send(200, "application/json", jsonchar);
+
+  }); //server.on api
+
+
+  server.begin();
 }
 
 
@@ -184,7 +242,22 @@ void setup() {
 
   Serial.println("\nWelcome - BME280/Button tester");
 
-  WiFiManager wifiManager;
+  SPIFFS.begin();
+
+  // WiFiManager wifiManager;
+  jWM.onConnect([]() {
+    DEBUG_PRINT("wifi connected");
+    DEBUG_PRINT(WiFi.localIP());
+    //EasySSDP::begin(server);
+  });
+  //...or AP mode is started
+  jWM.onAp([](){
+    DEBUG_PRINT("AP MODE");
+    //DEBUG_PRINT(persWM.getApSsid());
+  });
+
+  doStartWiFi();
+
 
   // If the button is down, start the configuration portal ...
 
@@ -224,21 +297,21 @@ void setup() {
   // *** This does not make sense here ? Does it ?
 
 
-  wifiManager.setSTAStaticIPConfig(ip, gw, dns);
-  wifiManager.setAPCallback(configModeCallback);
+  // wifiManager.setSTAStaticIPConfig(ip, gw, dns);
+  // wifiManager.setAPCallback(configModeCallback);
+  //
+  // //*********************************
+  // wifiManager.setDebugOutput(true);
+  // //*********************************
+  // WiFi.mode(WIFI_STA);
+  //
+  // if(!wifiManager.autoConnect())
+  // {
+  //   printf("*** ERROR - WIFI DID NOT CONNECT - SLEEPING 20s");
+  //   ESP.deepSleep(20e6); // 20e6 is 20 microseconds
+  // }
 
-  //*********************************
-  wifiManager.setDebugOutput(true);
-  //*********************************
-  WiFi.mode(WIFI_STA);
-
-  if(!wifiManager.autoConnect())
-  {
-    printf("*** ERROR - WIFI DID NOT CONNECT - SLEEPING 20s");
-    ESP.deepSleep(20e6); // 20e6 is 20 microseconds
-  }
-
-  printf("To wifi connected %d ms\n", millis());
+  //printf("To wifi connected %d ms\n", millis());
 
   // following from loop ...
   client.setServer(mqtt_server, 1883);
@@ -257,6 +330,11 @@ void loop()
   BME280::PresUnit presUnit(BME280::PresUnit_Pa);
 
   doButton();
+
+  jWM.handleWiFi();
+
+  dnsServer.processNextRequest();
+  server.handleClient();
 
   // connects to MQTT if not connected already
   if (!client.loop())
@@ -314,56 +392,56 @@ void loop()
 
 }
 
-// ----------------------------------------------------------------------------
-
-#ifdef PJR9NZ
-
-// state driven loop
-  switch(state)
-  {
-    case WIFI_DISCONNECTED:
-      // connect wifi
-      break;
-
-    case WIFI_CONNECTING:
-      // read temp, if not read already
-      break;
-
-    case WIFI_CONNECTED:
-      // connect to mqtt
-      break;
-
-    case MQTT_CONNECTING:
-      // nothing ?
-      break;
-
-    case MQTT_CONNECTED:
-      // Send in the message
-      // we should send in metrics - e.g. how long connections took?
-      // do we get message sent callbacks
-      break;
-
-  }
-
-// Example "fast" startup sequence ...
-
-// but should read values from flash?
-// so will take a little longer ...
-// can then use button press to force wifi manager and AP mode etc.
-
-start = millis();
-WiFi.config(ip,gw,subnet, dns);
-WiFi.begin("SSID","password");
-while (WiFi.status() != WL_CONNECTED) {
-      delay(1);
-  }
-now = millis();
-codeTime = now - start;
-wifi_station_get_config(&conf);
-//conf.bssid[0]=conf.bssid[0]+1;
-//WiFi.begin("SSID","password",6,conf.bssid,1);
-Serial.begin(115200);
-
-
-
-#endif
+// // ----------------------------------------------------------------------------
+//
+// #ifdef PJR9NZ
+//
+// // state driven loop
+//   switch(state)
+//   {
+//     case WIFI_DISCONNECTED:
+//       // connect wifi
+//       break;
+//
+//     case WIFI_CONNECTING:
+//       // read temp, if not read already
+//       break;
+//
+//     case WIFI_CONNECTED:
+//       // connect to mqtt
+//       break;
+//
+//     case MQTT_CONNECTING:
+//       // nothing ?
+//       break;
+//
+//     case MQTT_CONNECTED:
+//       // Send in the message
+//       // we should send in metrics - e.g. how long connections took?
+//       // do we get message sent callbacks
+//       break;
+//
+//   }
+//
+// // Example "fast" startup sequence ...
+//
+// // but should read values from flash?
+// // so will take a little longer ...
+// // can then use button press to force wifi manager and AP mode etc.
+//
+// start = millis();
+// WiFi.config(ip,gw,subnet, dns);
+// WiFi.begin("SSID","password");
+// while (WiFi.status() != WL_CONNECTED) {
+//       delay(1);
+//   }
+// now = millis();
+// codeTime = now - start;
+// wifi_station_get_config(&conf);
+// //conf.bssid[0]=conf.bssid[0]+1;
+// //WiFi.begin("SSID","password",6,conf.bssid,1);
+// Serial.begin(115200);
+//
+//
+//
+// #endif

@@ -42,7 +42,7 @@ String y;
 void setup() {
   DEBUG_BEGIN; //for terminal debugging
   DEBUG_PRINT();
-  
+
   //optional code handlers to run everytime wifi is connected...
   persWM.onConnect([]() {
     DEBUG_PRINT("wifi connected");
@@ -108,4 +108,3 @@ void loop() {
   // do stuff with x and y
 
 } //void loop
-
