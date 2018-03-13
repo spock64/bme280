@@ -3,7 +3,7 @@
 
 <head>
 	<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-	<title>ESP Menu</title>
+	<title>ESP Configuration</title>
 	<script>
 		var xhttp, updateTime;
 		var S="setAttribute",A="appendChild",H="innerHTML",X,wl;
@@ -14,17 +14,16 @@
 
 		function transmit(f) {
 			if (!xhttp) { //prevent simultaneous requests
-				g("status").innerHTML = "updating...";
+				g("status").innerHTML = "- Updating...";
 				xhttp = new XMLHttpRequest();
 				xhttp.open("POST", "/api");
 				xhttp.send(f ? (new FormData(f)) : "");
 				xhttp.onreadystatechange = function () {
 					if (xhttp.readyState === XMLHttpRequest.DONE && xhttp.status === 200) {
+						// The update must have worked ...
 						var data = JSON.parse(xhttp.responseText);
-						g("x").innerHTML = data.x;
-						g("y").innerHTML = data.y;
 						xhttp = null;
-						g("status").innerHTML = "";
+						g("status").innerHTML = "- Updated.";
 						updateTime = 0;
 					}
 				}
@@ -32,9 +31,6 @@
 			return false; //prevent form redirect
 		}
 
-		transmit();
-		setInterval(function () { g("ut").innerHTML = ++updateTime; }, 1000);
-		setInterval(transmit, 5000); //autoupdate display every 5s
 	</script>
 	<style>
 		input {
@@ -84,28 +80,38 @@
 </head>
 
 <body>
+	<h3>Configure Device</h3>
 	<div style='text-align:left;display:inline-block;width:320px;padding:5px'>
 
-	<h3>PJR Test</h3>
-	<h3>Current Data</h3>
-	x:
-	<span id="x"></span>
-	<br/> y:
-	<span id="y"></span>
-
-	<h6>Last updated
-		<span id="ut"></span> seconds ago.
+		Client & MQTT settings
 		<span id="status"></span>
-	</h6>
-
-	<h3>Status</h3>
+		<p>
+		<form id="mqtt" onsubmit="return transmit(this)">
+			DHCP Client ID:
+			<input type="data" name="dhcp_id" placeholder="Client ID"/>
+			Topic:
+			<input type="data" name="mqtt_topic" placeholder="Topic"/>
+			Server:
+			<input type="data" name="mqtt_svr" placeholder="Server IP"/>
+			Port:
+			<input type="number" name="mqtt_port" placeholder="Port number"/>
+			User:
+			<input type="data" name="mqtt_usr" placeholder="Username"/>
+			Password:
+			<input  type="password" name="mqtt_pw" placeholder="password"/>
+			Download Server:
+			<input  type="text" name="fw_svr" placeholder=""/>
+			D/L Server port:
+			<input  type="number" name="fw_port"/>
+			Debug:
+			<input  type="number" name="debug_level" placeholder="0"/>
+			<input type="submit" value="Save"/>
+		</form>
 
 
 		<br>
-		<button onclick="p('Configure device ?','config.htm')">Configure</button>
-		<br>
-		<button onclick="p('Setup WiFi ?','wifi.htm')">WiFi Settings</button>
-		<br>
+		<a href="javascript:history.back()">Back</a> |
+		<a href="/">Home</a>
 	</div>
 </body>
 
